@@ -69,7 +69,7 @@ public class GoapAgent : MonoBehaviour
         factory.AddBelief("Nothing", () => false);
 
         factory.AddBelief("AgentIdle", () => !navMeshAgent.hasPath);
-        factory.AddBelief("AgenMoving", () => navMeshAgent.hasPath);
+        factory.AddBelief("AgentMoving", () => navMeshAgent.hasPath);
     }
 
     void SetupActions()

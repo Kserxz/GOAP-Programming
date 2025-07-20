@@ -1,5 +1,5 @@
 using System;
-//using Malevolent;
+// using Malevolent;
 using UnityEngine;
 
 [RequireComponent(typeof(SphereCollider))]
@@ -31,10 +31,8 @@ public class Sensor : MonoBehaviour
         timer = new CountdownTimer(timerInterval);
         timer.OnTimerStop += () =>
         {
-            if (target != null)
-            {
-                UpdateTargetPosition(target);
-            }
+            UpdateTargetPosition(target.OrNull());
+
             timer.Start();
         };
         timer.Start();
