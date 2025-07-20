@@ -1,83 +1,43 @@
 using System.Collections.Generic;
 
-public class AgentAction
+namespace AI
 {
-    public string Name { get; }
-    public float Cost { get; private set; }
-
-    public HashSet<AgentBelief> Preconditions { get; } = new();
-    public HashSet<AgentBelief> Effects { get; } = new();
-
-    IActionStrategy strategy;
-    public bool Complete => strategy.Complete;
-
-    AgentAction(string name)
+    public class AgentAction
     {
-        Name = name;
-    }
+        public string Name { get; }
+        public float Cost { get; set; }
 
-    public void Start() => strategy.Start();
+        public HashSet<AgentBelief> Preconditions { get; } = new();
+        public HashSet<AgentBelief> Effects { get; } = new();
 
-    public void Update(float deltaTime)
-    {
-        // Проверка, может ли быть выполнено действие и обновление стратегии
-        if (strategy.CanPerform)
+        public IActionStrategy Strategy;
+        public bool Complete => Strategy.Complete;
+
+        public AgentAction(string name)
         {
-            strategy.Update(deltaTime);
+            Name = name;
         }
 
-        // Если стратегия ещё идёт, то выйти из функции
-        if (!strategy.Complete) return;
+        public void InitializeAgentAction() => Strategy.Start();
 
-        // Если стратегия завершилась, проверить эффекты совершённого действия
-        foreach (var effect in Effects)
+        public void UpdateAgentAction(float deltaTime)
         {
-            effect.Evaluate();
-        }
-    }
-
-    public void Stop() => strategy.Stop();
-
-    public class Builder
-    {
-        readonly AgentAction action;
-
-        public Builder(string name)
-        {
-            action = new AgentAction(name)
+            // Проверка, может ли быть выполнено действие и обновление стратегии
+            if (Strategy.CanPerform)
             {
-                Cost = 1
-            };
+                Strategy.Update(deltaTime);
+            }
+
+            // Если стратегия ещё идёт, то выйти из функции
+            if (!Strategy.Complete) return;
+
+            // Если стратегия завершилась, проверить эффекты совершённого действия
+            foreach (var effect in Effects)
+            {
+                effect.Evaluate();
+            }
         }
 
-        public Builder WithCost(float cost)
-        {
-            action.Cost = cost;
-            return this;
-        }
-
-        public Builder WithStrategy(IActionStrategy strategy)
-        {
-            action.strategy = strategy;
-            return this;
-        }
-
-        public Builder AddPrecondition(AgentBelief precondition)
-        {
-            action.Preconditions.Add(precondition);
-            return this;
-        }
-
-        public Builder AddEffect(AgentBelief effect)
-        {
-            action.Effects.Add(effect);
-            return this;
-        }
-
-        public AgentAction Build()
-        {
-            return action;
-        }
+        public void Stop() => Strategy.Stop();
     }
-    
 }

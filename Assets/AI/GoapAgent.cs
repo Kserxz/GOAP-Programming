@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using AI;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Serialization;
 
 [RequireComponent(typeof(NavMeshAgent))]
 // [RequireComponent(typeof(AnimationController))]
@@ -18,37 +21,36 @@ public class GoapAgent : MonoBehaviour
     [SerializeField] Transform garage;
     [SerializeField] Transform bedroom;
     [SerializeField] Transform bathroom;
-
-    NavMeshAgent navMeshAgent;
-    //    AnimationController animations;
-    Rigidbody rb;
-
-    [Header("Stats")]
-    public float health = 100;
-    public float stamina = 100;
-
-    CountdownTimer statsTimer;
-
-    GameObject target;
-    Vector3 destination;
-
-    AgentGoal lastGoal;
-    public AgentGoal currentGoal;
+    [FormerlySerializedAs("health")] [Header("Stats")]
+    public float Health = 100;
+    [FormerlySerializedAs("stamina")] public float Stamina = 100;
+    public AgentGoal CurrentGoal;
     public ActionPlan actionPlan;
     public AgentAction currentAction;
-
     public Dictionary<string, AgentBelief> beliefs;
     public HashSet<AgentAction> actions;
     public HashSet<AgentGoal> goals;
 
-    IGoapPlanner gPlanner;
+    private IGoapPlanner gPlanner;
+    public NavMeshAgent NavMeshAgent;
+    //    AnimationController animations;
+    public Rigidbody Rigidbody;
+    private CountdownTimer statsTimer;
+    private GameObject target;
+    private Vector3 destination;
+    private AgentGoal lastGoal;
+
+    private void OnValidate()
+    {
+        NavMeshAgent = GetComponent<NavMeshAgent>();
+        Rigidbody = GetComponent<Rigidbody>();
+    }
 
     void Awake()
     {
-        navMeshAgent = GetComponent<NavMeshAgent>();
         // animations = GetComponent<AnimationController>();
-        rb = GetComponent<Rigidbody>();
-        rb.freezeRotation = true;
+        
+        Rigidbody.freezeRotation = true;
 
         gPlanner = new GoapPlanner();
     }
@@ -68,22 +70,22 @@ public class GoapAgent : MonoBehaviour
 
         factory.AddBelief("Nothing", () => false);
 
-        factory.AddBelief("AgentIdle", () => !navMeshAgent.hasPath);
-        factory.AddBelief("AgentMoving", () => navMeshAgent.hasPath);
+        factory.AddBelief("AgentIdle", () => !NavMeshAgent.hasPath);
+        factory.AddBelief("AgentMoving", () => NavMeshAgent.hasPath);
     }
 
     void SetupActions()
     {
         actions = new HashSet<AgentAction>();
 
-        actions.Add(new AgentAction.Builder("Relax")
+        actions.Add(new Builder("Relax")
         .WithStrategy(new IdleStrategy(5))
         .AddEffect(beliefs["Nothing"])
         .Build());
 
 
-        actions.Add(new AgentAction.Builder("Wander Around")
-        .WithStrategy(new WanderStrategy(navMeshAgent, 10))
+        actions.Add(new Builder("Wander Around")
+        .WithStrategy(new WanderStrategy(NavMeshAgent, 10))
         .AddEffect(beliefs["AgentMoving"])
         .Build());
     }
@@ -117,10 +119,10 @@ public class GoapAgent : MonoBehaviour
     // TODO Перенести в систему статистик
     void UpdateStats()
     {
-        stamina += InRangeOf(restinPosition.position, 3f) ? 20 : -10;
-        health += InRangeOf(kitchen.position, 3f) ? 20 : -5;
-        stamina = Mathf.Clamp(stamina, 0, 100);
-        health = Mathf.Clamp(health, 0, 100);
+        Stamina += InRangeOf(restinPosition.position, 3f) ? 20 : -10;
+        Health += InRangeOf(kitchen.position, 3f) ? 20 : -5;
+        Stamina = Mathf.Clamp(Stamina, 0, 100);
+        Health = Mathf.Clamp(Health, 0, 100);
     }
 
     bool InRangeOf(Vector3 pos, float range) => Vector3.Distance(transform.position, pos) < range;
@@ -133,7 +135,7 @@ public class GoapAgent : MonoBehaviour
         Debug.Log("Target changed, clearing current action and goal");
         // Заставляем планировщик пересчитать план
         currentAction = null;
-        currentGoal = null;
+        CurrentGoal = null;
     }
 
     void Update()
@@ -149,12 +151,12 @@ public class GoapAgent : MonoBehaviour
 
             if (actionPlan != null && actionPlan.Actions.Count > 0)
             {
-                navMeshAgent.ResetPath();
+                NavMeshAgent.ResetPath();
 
-                currentGoal = actionPlan.AgentGoal;
+                CurrentGoal = actionPlan.AgentGoal;
                 currentAction = actionPlan.Actions.Pop();
-                currentAction.Start();
-                Debug.Log($"Goal: {currentGoal.Name} with {actionPlan.Actions.Count} actions in plan");
+                currentAction.InitializeAgentAction();
+                Debug.Log($"Goal: {CurrentGoal.Name} with {actionPlan.Actions.Count} actions in plan");
                 Debug.Log($"Popped action: {currentAction.Name}");
             }
         }
@@ -162,7 +164,7 @@ public class GoapAgent : MonoBehaviour
         // Если есть текущее действие, выполняем его
         if (actionPlan != null && currentAction != null)
         {
-            currentAction.Update(Time.deltaTime);
+            currentAction.UpdateAgentAction(Time.deltaTime);
 
             if (currentAction.Complete)
             {
@@ -173,8 +175,8 @@ public class GoapAgent : MonoBehaviour
                 if (actionPlan.Actions.Count == 0)
                 {
                     Debug.Log("Plan complete");
-                    lastGoal = currentGoal;
-                    currentGoal = null;
+                    lastGoal = CurrentGoal;
+                    CurrentGoal = null;
                 }
             }
         }
@@ -183,12 +185,12 @@ public class GoapAgent : MonoBehaviour
 
     void CalculatePlan()
     {
-        var priorityLevel = currentGoal?.Priority ?? 0;
+        var priorityLevel = CurrentGoal?.Priority ?? 0;
 
         HashSet<AgentGoal> goalsToCheck = goals;
 
         // Если у нас есть текущая цель, проверяем только цели с более высоким приоритетом
-        if (currentGoal != null)
+        if (CurrentGoal != null)
         {
             Debug.Log("Current goal exists, checking goals with higher priority");
             goalsToCheck = new HashSet<AgentGoal>(goals.Where(g => g.Priority > priorityLevel));
