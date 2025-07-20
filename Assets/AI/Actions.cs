@@ -1,16 +1,83 @@
-using UnityEngine;
+using System.Collections.Generic;
 
-public class Actions : MonoBehaviour
+public class AgentAction
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    public string Name { get; }
+    public float Cost { get; private set; }
+
+    public HashSet<AgentBelief> Preconditions { get; } = new();
+    public HashSet<AgentBelief> Effects { get; } = new();
+
+    IActionStrategy strategy;
+    public bool Complete => strategy.Complete;
+
+    AgentAction(string name)
     {
-        
+        Name = name;
     }
 
-    // Update is called once per frame
-    void Update()
+    public void Start() => strategy.Start();
+
+    public void Update(float deltaTime)
     {
-        
+        // Проверка, может ли быть выполнено действие и обновление стратегии
+        if (strategy.CanPerform)
+        {
+            strategy.Update(deltaTime);
+        }
+
+        // Если стратегия ещё идёт, то выйти из функции
+        if (!strategy.Complete) return;
+
+        // Если стратегия завершилась, проверить эффекты совершённого действия
+        foreach (var effect in Effects)
+        {
+            effect.Evaluate();
+        }
     }
+
+    public void Stop() => strategy.Stop();
+
+    public class Builder
+    {
+        readonly AgentAction action;
+
+        public Builder(string name)
+        {
+            action = new AgentAction(name)
+            {
+                Cost = 1
+            };
+        }
+
+        public Builder WithCost(float cost)
+        {
+            action.Cost = cost;
+            return this;
+        }
+
+        public Builder WithStrategy(IActionStrategy strategy)
+        {
+            action.strategy = strategy;
+            return this;
+        }
+
+        public Builder AddPrecondition(AgentBelief precondition)
+        {
+            action.Preconditions.Add(precondition);
+            return this;
+        }
+
+        public Builder AddEffect(AgentBelief effect)
+        {
+            action.Effects.Add(effect);
+            return this;
+        }
+
+        public AgentAction Build()
+        {
+            return action;
+        }
+    }
+    
 }
