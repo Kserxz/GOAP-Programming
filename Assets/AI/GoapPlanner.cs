@@ -45,6 +45,9 @@ public class GoapPlanner : IGoapPlanner
 
     bool FindPath(Node parent, HashSet<AgentAction> actions)
     {
+        // Сортируем действия по цене
+        var orderedActions = actions.OrderBy(a => a.Cost);
+
         foreach (var action in actions)
         {
             var requiredEffects = parent.RequiredEffects;

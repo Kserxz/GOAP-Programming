@@ -13,11 +13,12 @@ public class GoapAgent : MonoBehaviour
     [SerializeField] Sensor attackSensor;
 
     [Header("Known Locations")]
-    [SerializeField] Transform restinPosition;
-    [SerializeField] Transform kitchen;
-    [SerializeField] Transform garage;
-    [SerializeField] Transform bedroom;
-    [SerializeField] Transform bathroom;
+    [SerializeField] Transform restingPosition;
+    [SerializeField] Transform kitchenPosition;
+    [SerializeField] Transform garagePosition;
+    [SerializeField] Transform bedroomPosition;
+    [SerializeField] Transform officePosition;
+    [SerializeField] Transform bathroomPosition;
 
     NavMeshAgent navMeshAgent;
     //    AnimationController animations;
@@ -70,6 +71,19 @@ public class GoapAgent : MonoBehaviour
 
         factory.AddBelief("AgentIdle", () => !navMeshAgent.hasPath);
         factory.AddBelief("AgentMoving", () => navMeshAgent.hasPath);
+        factory.AddBelief("AgentHealthLow", () => health < 20);
+        factory.AddBelief("AgentIsHealthy", () => health >= 40);
+        factory.AddBelief("AgentStaminaLow", () => stamina < 20);
+        factory.AddBelief("AgentIsRested", () => stamina >= 40);
+
+        factory.AddLocationBelief("AgentInOffice", 3f, officePosition);
+        factory.AddLocationBelief("AgentInKitchen", 3f, kitchenPosition);
+        factory.AddLocationBelief("AgentAtRestingPosition", 3f, restingPosition);
+        factory.AddLocationBelief("AgentInBathroom", 3f, bathroomPosition);
+
+        factory.AddSensorBelief("SpiritInChaseRange", chaseSensor);
+        factory.AddSensorBelief("SpiritInAttackRange", attackSensor);
+        factory.AddBelief("AttackingSpirit", () => false); // Духа всегда можно атаковать, значение никогда не станет правдой
     }
 
     void SetupActions()
@@ -77,15 +91,56 @@ public class GoapAgent : MonoBehaviour
         actions = new HashSet<AgentAction>();
 
         actions.Add(new AgentAction.Builder("Relax")
-        .WithStrategy(new IdleStrategy(5))
-        .AddEffect(beliefs["Nothing"])
-        .Build());
+            .WithStrategy(new IdleStrategy(5))
+            .AddEffect(beliefs["Nothing"])
+            .Build());
 
 
         actions.Add(new AgentAction.Builder("Wander Around")
-        .WithStrategy(new WanderStrategy(navMeshAgent, 10))
-        .AddEffect(beliefs["AgentMoving"])
-        .Build());
+            .WithStrategy(new WanderStrategy(navMeshAgent, 10))
+            .AddEffect(beliefs["AgentMoving"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("MoveToEatingPosition")
+            .WithStrategy(new MoveStrategy(navMeshAgent, () => kitchenPosition.position))
+            .AddEffect(beliefs["AgentInKitchen"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("Eat")
+            .WithStrategy(new IdleStrategy(10)) // Позже заменить на команду
+            .AddPrecondition(beliefs["AgentInKitchen"])
+            .AddEffect(beliefs["AgentIsHealthy"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("MoveToBathroom")
+            .WithStrategy(new MoveStrategy(navMeshAgent, () => bathroomPosition.position))
+            .AddEffect(beliefs["AgentInBathroom"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("MoveFromBathroomToRestingPosition")
+            .WithStrategy(new MoveStrategy(navMeshAgent, () => restingPosition.position))
+            .WithCost(2)
+            .AddPrecondition(beliefs["AgentInBathroom"])
+            .AddEffect(beliefs["AgentAtRestingPosition"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("Rest")
+            .WithStrategy(new IdleStrategy(5))
+            .AddPrecondition(beliefs["AgentAtRestingPosition"])
+            .AddEffect(beliefs["AgentIsRested"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("ChaseSpirit")
+            .WithStrategy(new MoveStrategy(navMeshAgent, () => beliefs["SpiritInChaseRange"].Location))
+            .AddPrecondition(beliefs["SpiritInChaseRange"])
+            .AddEffect(beliefs["SpiritInAttackRange"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("SeekForSpirit")
+            .WithStrategy(new IdleStrategy(1)) // заменить на команду и AttackPlayer(animations)
+            .AddPrecondition(beliefs["SpiritInAttackRange"])
+            .AddEffect(beliefs["AttackingSpirit"])
+            .Build());
     }
 
     void SetupGoals()
@@ -93,14 +148,24 @@ public class GoapAgent : MonoBehaviour
         goals = new HashSet<AgentGoal>();
 
         goals.Add(new AgentGoal.Builder("Chill Out")
-        .WithPriority(1)
-        .WithDesiredEffect(beliefs["Nothing"])
-        .Build());
+            .WithPriority(1)
+            .WithDesiredEffect(beliefs["Nothing"])
+            .Build());
 
         goals.Add(new AgentGoal.Builder("Wander")
-        .WithPriority(1)
-        .WithDesiredEffect(beliefs["AgentMoving"])
-        .Build());
+            .WithPriority(1)
+            .WithDesiredEffect(beliefs["AgentMoving"])
+            .Build());
+
+        goals.Add(new AgentGoal.Builder("KeepHealthUp")
+            .WithPriority(5)
+            .WithDesiredEffect(beliefs["AgentIsHealthy"])
+            .Build());
+
+        goals.Add(new AgentGoal.Builder("KeepStaminaUp")
+            .WithPriority(4)
+            .WithDesiredEffect(beliefs["AgentIsRested"])
+            .Build());
     }
 
     void SetupTimers()
@@ -117,8 +182,8 @@ public class GoapAgent : MonoBehaviour
     // TODO Перенести в систему статистик
     void UpdateStats()
     {
-        stamina += InRangeOf(restinPosition.position, 3f) ? 20 : -10;
-        health += InRangeOf(kitchen.position, 3f) ? 20 : -5;
+        stamina += InRangeOf(restingPosition.position, 3f) ? 20 : -10;
+        health += InRangeOf(kitchenPosition.position, 3f) ? 20 : -5;
         stamina = Mathf.Clamp(stamina, 0, 100);
         health = Mathf.Clamp(health, 0, 100);
     }
@@ -152,9 +217,9 @@ public class GoapAgent : MonoBehaviour
                 navMeshAgent.ResetPath();
 
                 currentGoal = actionPlan.AgentGoal;
+                Debug.Log($"Goal: {currentGoal.Name} with {actionPlan.Actions.Count} actions in plan");
                 currentAction = actionPlan.Actions.Pop();
                 currentAction.Start();
-                Debug.Log($"Goal: {currentGoal.Name} with {actionPlan.Actions.Count} actions in plan");
                 Debug.Log($"Popped action: {currentAction.Name}");
             }
         }

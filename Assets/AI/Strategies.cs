@@ -22,7 +22,49 @@ public interface IActionStrategy
         // noop
     }
 }
+/*
+public class AttackStrategy : IActionStrategy
+{
+    public bool CanPerform => true; // Агент всегда может атаковать
+    public bool Complete { get; }
 
+    readonly CountdownTimer timer;
+    // readonly AnimationController animations;
+
+    public AttackStrategy(AnimationController animations)
+    {
+        this.animations = animations;
+        timer = new CountdownTimer(animations.GetAnimationLength(animations.attackClip));
+        timer.OnTimerStart += () => Complete = false;
+        timer.OnTimerStop += () => Complete = true;
+    }
+
+    public void Start()
+    {
+    timer.Start();
+    animations.Attack();
+    }
+
+    public void Update(float deltaTime) => timer.Tick(deltaTime);
+}
+*/
+public class MoveStrategy : IActionStrategy
+{
+    readonly NavMeshAgent agent;
+    readonly Func<Vector3> destination;
+
+    public bool CanPerform => !Complete;
+    public bool Complete => agent.remainingDistance <= 2f && !agent.pathPending;
+
+    public MoveStrategy(NavMeshAgent agent, Func<Vector3> destination)
+    {
+        this.agent = agent;
+        this.destination = destination;
+    }
+
+    public void Start() => agent.SetDestination(destination());
+    public void Stop() => agent.ResetPath();
+}
 public class WanderStrategy : IActionStrategy
 {
     readonly NavMeshAgent agent;
