@@ -44,6 +44,11 @@ public class GoapAgent : MonoBehaviour
 
     IGoapPlanner gPlanner;
 
+    [Header("GOAP Assets")]
+    [SerializeField] AgentBeliefAsset[] beliefAssets;
+    [SerializeField] AgentActionAsset[] actionAssets;
+    [SerializeField] AgentGoalAsset[] goalAssets;
+
     void Awake()
     {
         navMeshAgent = GetComponent<NavMeshAgent>();
@@ -67,14 +72,31 @@ public class GoapAgent : MonoBehaviour
         beliefs = new Dictionary<string, AgentBelief>();
         BeliefFactory factory = new BeliefFactory(this, beliefs);
 
-        factory.AddBelief("Nothing", () => false);
+        // Из ScriptableObject-ассетов
+        if (beliefAssets != null)
+        {
+            foreach (var asset in beliefAssets)
+            {
+                if (asset != null && !beliefs.ContainsKey(asset.BeliefName))
+                    beliefs.Add(asset.BeliefName, asset.CreateBelief());
+            }
+        }
 
-        factory.AddBelief("AgentIdle", () => !navMeshAgent.hasPath);
-        factory.AddBelief("AgentMoving", () => navMeshAgent.hasPath);
-        factory.AddBelief("AgentHealthLow", () => health < 20);
-        factory.AddBelief("AgentIsHealthy", () => health >= 40);
-        factory.AddBelief("AgentStaminaLow", () => stamina < 20);
-        factory.AddBelief("AgentIsRested", () => stamina >= 40);
+        // Программные убеждения (сенсоры, локации и т.д.)
+        // Добавлять только если их нет в beliefs
+        void AddIfNotExists(string key, System.Func<bool> cond)
+        {
+            if (!beliefs.ContainsKey(key))
+                factory.AddBelief(key, cond);
+        }
+
+        AddIfNotExists("Nothing", () => false);
+        AddIfNotExists("AgentIdle", () => !navMeshAgent.hasPath);
+        AddIfNotExists("AgentMoving", () => navMeshAgent.hasPath);
+        AddIfNotExists("AgentHealthLow", () => health < 20);
+        AddIfNotExists("AgentIsHealthy", () => health >= 40);
+        AddIfNotExists("AgentStaminaLow", () => stamina < 20);
+        AddIfNotExists("AgentIsRested", () => stamina >= 40);
 
         factory.AddLocationBelief("AgentInOffice", 3f, officePosition);
         factory.AddLocationBelief("AgentInKitchen", 3f, kitchenPosition);
@@ -83,89 +105,54 @@ public class GoapAgent : MonoBehaviour
 
         factory.AddSensorBelief("SpiritInChaseRange", chaseSensor);
         factory.AddSensorBelief("SpiritInAttackRange", attackSensor);
-        factory.AddBelief("AttackingSpirit", () => false); // Духа всегда можно атаковать, значение никогда не станет правдой
+        AddIfNotExists("AttackingSpirit", () => false);
     }
 
     void SetupActions()
     {
         actions = new HashSet<AgentAction>();
 
-        actions.Add(new AgentAction.Builder("Relax")
-            .WithStrategy(new IdleStrategy(5))
-            .AddEffect(beliefs["Nothing"])
-            .Build());
+        if (actionAssets != null)
+        {
+            foreach (var asset in actionAssets)
+            {
+                if (asset != null)
+                {
+                    var action = asset.CreateAction();
 
+                    // Подставляем NavMeshAgent в MoveStrategy/WanderStrategy
+                    if (action.Strategy is MoveStrategy move)
+                    {
+                        typeof(MoveStrategy)
+                            .GetField("agent", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                            .SetValue(move, navMeshAgent);
+                    }
+                    else if (action.Strategy is WanderStrategy wander)
+                    {
+                        typeof(WanderStrategy)
+                            .GetField("agent", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                            .SetValue(wander, navMeshAgent);
+                    }
 
-        actions.Add(new AgentAction.Builder("Wander Around")
-            .WithStrategy(new WanderStrategy(navMeshAgent, 10))
-            .AddEffect(beliefs["AgentMoving"])
-            .Build());
-
-        actions.Add(new AgentAction.Builder("MoveToEatingPosition")
-            .WithStrategy(new MoveStrategy(navMeshAgent, () => kitchenPosition.position))
-            .AddEffect(beliefs["AgentInKitchen"])
-            .Build());
-
-        actions.Add(new AgentAction.Builder("Eat")
-            .WithStrategy(new IdleStrategy(10)) // Позже заменить на команду
-            .AddPrecondition(beliefs["AgentInKitchen"])
-            .AddEffect(beliefs["AgentIsHealthy"])
-            .Build());
-
-        actions.Add(new AgentAction.Builder("MoveToBathroom")
-            .WithStrategy(new MoveStrategy(navMeshAgent, () => bathroomPosition.position))
-            .AddEffect(beliefs["AgentInBathroom"])
-            .Build());
-
-        actions.Add(new AgentAction.Builder("MoveFromBathroomToRestingPosition")
-            .WithStrategy(new MoveStrategy(navMeshAgent, () => restingPosition.position))
-            .WithCost(2)
-            .AddPrecondition(beliefs["AgentInBathroom"])
-            .AddEffect(beliefs["AgentAtRestingPosition"])
-            .Build());
-
-        actions.Add(new AgentAction.Builder("Rest")
-            .WithStrategy(new IdleStrategy(5))
-            .AddPrecondition(beliefs["AgentAtRestingPosition"])
-            .AddEffect(beliefs["AgentIsRested"])
-            .Build());
-
-        actions.Add(new AgentAction.Builder("ChaseSpirit")
-            .WithStrategy(new MoveStrategy(navMeshAgent, () => beliefs["SpiritInChaseRange"].Location))
-            .AddPrecondition(beliefs["SpiritInChaseRange"])
-            .AddEffect(beliefs["SpiritInAttackRange"])
-            .Build());
-
-        actions.Add(new AgentAction.Builder("SeekForSpirit")
-            .WithStrategy(new IdleStrategy(1)) // заменить на команду и AttackPlayer(animations)
-            .AddPrecondition(beliefs["SpiritInAttackRange"])
-            .AddEffect(beliefs["AttackingSpirit"])
-            .Build());
+                    actions.Add(action);
+                }
+            }
+        }
     }
 
     void SetupGoals()
     {
         goals = new HashSet<AgentGoal>();
 
-        goals.Add(new AgentGoal.Builder("Chill Out")
-            .WithPriority(1)
-            .WithDesiredEffect(beliefs["Nothing"])
-            .Build());
-
-        goals.Add(new AgentGoal.Builder("Wander")
-            .WithPriority(1)
-            .WithDesiredEffect(beliefs["AgentMoving"])
-            .Build());
-
-        goals.Add(new AgentGoal.Builder("KeepHealthUp")
-            .WithPriority(5)
-            .WithDesiredEffect(beliefs["AgentIsHealthy"])
-            .Build());
-
-        goals.Add(new AgentGoal.Builder("KeepStaminaUp")
-            .WithPriority(4)
-            .WithDesiredEffect(beliefs["AgentIsRested"])
-            .Build());
+        // Только из ScriptableObject-ассетов
+        if (goalAssets != null)
+        {
+            foreach (var asset in goalAssets)
+            {
+                if (asset != null)
+                    goals.Add(asset.CreateGoal());
+            }
+        }
     }
 
     void SetupTimers()

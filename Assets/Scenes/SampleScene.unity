@@ -4507,12 +4507,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   chaseSensor: {fileID: 1550436723}
   attackSensor: {fileID: 2018644880}
-  restingPosition: {fileID: 298555148}
-  kitchenPosition: {fileID: 511417742}
-  garagePosition: {fileID: 1747660061}
-  bedroomPosition: {fileID: 1573298766}
-  officePosition: {fileID: 1573298766}
-  bathroomPosition: {fileID: 360519805}
+  knownLocations:
+  - Name: Kitchen
+    Position: {fileID: 511417742}
+  - Name: Resting
+    Position: {fileID: 298555148}
+  beliefAssets: []
+  actionAssets: []
+  goalAssets: []
   health: 100
   stamina: 100
 --- !u!135 &723683088
