@@ -60,6 +60,7 @@ public class AgentAction
         public Builder WithStrategy(IActionStrategy strategy)
         {
             action.Strategy = strategy;
+            action.strategy = strategy; // <--- добавьте эту строку
             return this;
         }
 

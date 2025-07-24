@@ -20,6 +20,10 @@ public class GoapAgent : MonoBehaviour
     [SerializeField] Transform officePosition;
     [SerializeField] Transform bathroomPosition;
 
+    [Header("GOAP Assets")]
+    [SerializeField] AgentActionAsset[] actionAssets;
+    [SerializeField] AgentGoalAsset[] goalAssets;
+
     NavMeshAgent navMeshAgent;
     //    AnimationController animations;
     Rigidbody rb;
@@ -44,11 +48,6 @@ public class GoapAgent : MonoBehaviour
 
     IGoapPlanner gPlanner;
 
-    [Header("GOAP Assets")]
-    [SerializeField] AgentBeliefAsset[] beliefAssets;
-    [SerializeField] AgentActionAsset[] actionAssets;
-    [SerializeField] AgentGoalAsset[] goalAssets;
-
     void Awake()
     {
         navMeshAgent = GetComponent<NavMeshAgent>();
@@ -72,31 +71,14 @@ public class GoapAgent : MonoBehaviour
         beliefs = new Dictionary<string, AgentBelief>();
         BeliefFactory factory = new BeliefFactory(this, beliefs);
 
-        // Из ScriptableObject-ассетов
-        if (beliefAssets != null)
-        {
-            foreach (var asset in beliefAssets)
-            {
-                if (asset != null && !beliefs.ContainsKey(asset.BeliefName))
-                    beliefs.Add(asset.BeliefName, asset.CreateBelief());
-            }
-        }
-
-        // Программные убеждения (сенсоры, локации и т.д.)
-        // Добавлять только если их нет в beliefs
-        void AddIfNotExists(string key, System.Func<bool> cond)
-        {
-            if (!beliefs.ContainsKey(key))
-                factory.AddBelief(key, cond);
-        }
-
-        AddIfNotExists("Nothing", () => false);
-        AddIfNotExists("AgentIdle", () => !navMeshAgent.hasPath);
-        AddIfNotExists("AgentMoving", () => navMeshAgent.hasPath);
-        AddIfNotExists("AgentHealthLow", () => health < 20);
-        AddIfNotExists("AgentIsHealthy", () => health >= 40);
-        AddIfNotExists("AgentStaminaLow", () => stamina < 20);
-        AddIfNotExists("AgentIsRested", () => stamina >= 40);
+        // Жёстко заданные убеждения
+        factory.AddBelief("Nothing", () => false);
+        factory.AddBelief("AgentIdle", () => !navMeshAgent.hasPath);
+        factory.AddBelief("AgentMoving", () => navMeshAgent.hasPath);
+        factory.AddBelief("AgentHealthLow", () => health < 20);
+        factory.AddBelief("AgentIsHealthy", () => health >= 40);
+        factory.AddBelief("AgentStaminaLow", () => stamina < 20);
+        factory.AddBelief("AgentIsRested", () => stamina >= 40);
 
         factory.AddLocationBelief("AgentInOffice", 3f, officePosition);
         factory.AddLocationBelief("AgentInKitchen", 3f, kitchenPosition);
@@ -105,37 +87,18 @@ public class GoapAgent : MonoBehaviour
 
         factory.AddSensorBelief("SpiritInChaseRange", chaseSensor);
         factory.AddSensorBelief("SpiritInAttackRange", attackSensor);
-        AddIfNotExists("AttackingSpirit", () => false);
+        factory.AddBelief("AttackingSpirit", () => false);
     }
 
     void SetupActions()
     {
         actions = new HashSet<AgentAction>();
-
         if (actionAssets != null)
         {
             foreach (var asset in actionAssets)
             {
                 if (asset != null)
-                {
-                    var action = asset.CreateAction();
-
-                    // Подставляем NavMeshAgent в MoveStrategy/WanderStrategy
-                    if (action.Strategy is MoveStrategy move)
-                    {
-                        typeof(MoveStrategy)
-                            .GetField("agent", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                            .SetValue(move, navMeshAgent);
-                    }
-                    else if (action.Strategy is WanderStrategy wander)
-                    {
-                        typeof(WanderStrategy)
-                            .GetField("agent", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                            .SetValue(wander, navMeshAgent);
-                    }
-
-                    actions.Add(action);
-                }
+                    actions.Add(asset.CreateAction(beliefs, navMeshAgent));
             }
         }
     }
@@ -143,14 +106,12 @@ public class GoapAgent : MonoBehaviour
     void SetupGoals()
     {
         goals = new HashSet<AgentGoal>();
-
-        // Только из ScriptableObject-ассетов
         if (goalAssets != null)
         {
             foreach (var asset in goalAssets)
             {
                 if (asset != null)
-                    goals.Add(asset.CreateGoal());
+                    goals.Add(asset.CreateGoal(beliefs));
             }
         }
     }

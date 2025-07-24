@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3b55f59a7f88d9a47b99bccde07139f5, type: 3}
   m_Name: StayHealthy
   m_EditorClassIdentifier: 
-  GoalName: 
-  Priority: 1
-  DesiredEffects: []
+  GoalName: StayHealthy
+  Priority: 5
+  DesiredEffects:
+  - 

@@ -12,11 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 403f1c5fc5f5fe741a8887202c8f8dec, type: 3}
   m_Name: IdleAction
   m_EditorClassIdentifier: 
-  ActionName: 
+  ActionName: IdleAction
   Cost: 1
   StrategyType: 0
-  IdleDuration: 1
+  IdleDuration: 5
   WanderRadius: 10
   MoveTarget: {fileID: 0}
   Preconditions: []
-  Effects: []
+  Effects:
+  - Nothing

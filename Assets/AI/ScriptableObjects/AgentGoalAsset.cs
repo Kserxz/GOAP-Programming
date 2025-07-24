@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [CreateAssetMenu(menuName = "GOAP/Goal")]
 public class AgentGoalAsset : ScriptableObject
@@ -6,16 +7,21 @@ public class AgentGoalAsset : ScriptableObject
     public string GoalName;
     public float Priority = 1.0f;
 
-    public AgentBeliefAsset[] DesiredEffects;
+    [Header("Desired Effects (Belief Names)")]
+    public string[] DesiredEffects;
 
-    public AgentGoal CreateGoal()
+    public AgentGoal CreateGoal(Dictionary<string, AgentBelief> beliefs)
     {
         var builder = new AgentGoal.Builder(GoalName)
             .WithPriority(Priority);
 
-        foreach (var effect in DesiredEffects)
+        if (DesiredEffects != null)
         {
-            builder.WithDesiredEffect(effect.CreateBelief());
+            foreach (var effect in DesiredEffects)
+            {
+                if (!string.IsNullOrEmpty(effect) && beliefs.TryGetValue(effect, out var belief))
+                    builder.WithDesiredEffect(belief);
+            }
         }
 
         return builder.Build();

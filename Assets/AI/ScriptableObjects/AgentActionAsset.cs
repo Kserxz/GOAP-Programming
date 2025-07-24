@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public enum ActionStrategyType
 {
@@ -19,13 +20,13 @@ public class AgentActionAsset : ScriptableObject
     public float WanderRadius = 10f;
     public Transform MoveTarget;
 
-    [Header("Preconditions")]
-    public AgentBeliefAsset[] Preconditions;
+    [Header("Preconditions (Belief Names)")]
+    public string[] Preconditions;
 
-    [Header("Effects")]
-    public AgentBeliefAsset[] Effects;
+    [Header("Effects (Belief Names)")]
+    public string[] Effects;
 
-    public AgentAction CreateAction()
+    public AgentAction CreateAction(Dictionary<string, AgentBelief> beliefs, UnityEngine.AI.NavMeshAgent navMeshAgent)
     {
         var builder = new AgentAction.Builder(ActionName)
             .WithCost(Cost);
@@ -37,27 +38,31 @@ public class AgentActionAsset : ScriptableObject
                 builder.WithStrategy(new IdleStrategy(IdleDuration));
                 break;
             case ActionStrategyType.Move:
-                builder.WithStrategy(new MoveStrategy(
-                    null, // NavMeshAgent будет подставлен в GoapAgent при создании
-                    () => MoveTarget ? MoveTarget.position : Vector3.zero
-                ));
+                builder.WithStrategy(new MoveStrategy(navMeshAgent, () => MoveTarget ? MoveTarget.position : Vector3.zero));
                 break;
             case ActionStrategyType.Wander:
-                builder.WithStrategy(new WanderStrategy(
-                    null, // NavMeshAgent будет подставлен в GoapAgent при создании
-                    WanderRadius
-                ));
+                builder.WithStrategy(new WanderStrategy(navMeshAgent, WanderRadius));
                 break;
         }
 
-        foreach (var pre in Preconditions)
+        // Preconditions
+        if (Preconditions != null)
         {
-            builder.AddPrecondition(pre.CreateBelief());
+            foreach (var pre in Preconditions)
+            {
+                if (!string.IsNullOrEmpty(pre) && beliefs.TryGetValue(pre, out var belief))
+                    builder.AddPrecondition(belief);
+            }
         }
 
-        foreach (var effect in Effects)
+        // Effects
+        if (Effects != null)
         {
-            builder.AddEffect(effect.CreateBelief());
+            foreach (var effect in Effects)
+            {
+                if (!string.IsNullOrEmpty(effect) && beliefs.TryGetValue(effect, out var belief))
+                    builder.AddEffect(belief);
+            }
         }
 
         return builder.Build();
