@@ -19,6 +19,7 @@ public class GoapAgent : MonoBehaviour
     [SerializeField] Transform bedroomPosition;
     [SerializeField] Transform officePosition;
     [SerializeField] Transform bathroomPosition;
+    [SerializeField] Transform trainingPosition;
 
     [Header("GOAP Assets")]
     [SerializeField] AgentActionAsset[] actionAssets;
@@ -31,6 +32,9 @@ public class GoapAgent : MonoBehaviour
     [Header("Stats")]
     public float health = 100;
     public float stamina = 100;
+    public float studyDesire = 100;
+    public float trainingDesire = 100;      // Новая статистика
+    public float repairCarDesire = 100;     // Новая статистика
 
     CountdownTimer statsTimer;
 
@@ -45,6 +49,8 @@ public class GoapAgent : MonoBehaviour
     public Dictionary<string, AgentBelief> beliefs;
     public HashSet<AgentAction> actions;
     public HashSet<AgentGoal> goals;
+
+    Dictionary<string, Transform> locations;
 
     IGoapPlanner gPlanner;
 
@@ -61,9 +67,26 @@ public class GoapAgent : MonoBehaviour
     void Start()
     {
         SetupTimers();
+        SetupLocations();
         SetupBeliefs();
         SetupActions();
         SetupGoals();
+    }
+
+    void SetupLocations()
+    {
+        locations = new Dictionary<string, Transform>
+        {
+            { "restingPosition", restingPosition },
+            { "kitchenPosition", kitchenPosition },
+            { "garagePosition", garagePosition },
+            { "bedroomPosition", bedroomPosition },
+            { "officePosition", officePosition },
+            { "bathroomPosition", bathroomPosition },
+            { "trainingPosition", trainingPosition },
+            { "repairCarPosition", garagePosition }
+            // добавить другие при расширении
+        };
     }
 
     void SetupBeliefs()
@@ -73,21 +96,38 @@ public class GoapAgent : MonoBehaviour
 
         // Жёстко заданные убеждения
         factory.AddBelief("Nothing", () => false);
+        factory.AddBelief("AgentHandsAreClean", () => false);
         factory.AddBelief("AgentIdle", () => !navMeshAgent.hasPath);
         factory.AddBelief("AgentMoving", () => navMeshAgent.hasPath);
+
+        // Убеждения для здоровья и стамины
         factory.AddBelief("AgentHealthLow", () => health < 20);
         factory.AddBelief("AgentIsHealthy", () => health >= 40);
         factory.AddBelief("AgentStaminaLow", () => stamina < 20);
         factory.AddBelief("AgentIsRested", () => stamina >= 40);
 
+        // Убеждения для обучения
+        factory.AddBelief("AgentStudyDesireLow", () => studyDesire < 20);
+        factory.AddBelief("AgentIsStudied", () => studyDesire >= 95);
+
+        // убеждения для TrainingDesire
+        factory.AddBelief("AgentTrainingDesireLow", () => trainingDesire < 20);
+        factory.AddBelief("AgentIsTrained", () => trainingDesire >= 70);
+
+        // убеждения для RepairCarDesire
+        factory.AddBelief("AgentRepairCarDesireLow", () => repairCarDesire < 20);
+        factory.AddBelief("AgentCarIsRepaired", () => repairCarDesire >= 70);
+
         factory.AddLocationBelief("AgentInOffice", 3f, officePosition);
         factory.AddLocationBelief("AgentInKitchen", 3f, kitchenPosition);
         factory.AddLocationBelief("AgentAtRestingPosition", 3f, restingPosition);
         factory.AddLocationBelief("AgentInBathroom", 3f, bathroomPosition);
+        factory.AddLocationBelief("AgentInGym", 3f, trainingPosition);
+        factory.AddLocationBelief("AgentInGarage", 3f, garagePosition);
 
-        factory.AddSensorBelief("SpiritInChaseRange", chaseSensor);
-        factory.AddSensorBelief("SpiritInAttackRange", attackSensor);
-        factory.AddBelief("AttackingSpirit", () => false);
+        factory.AddSensorBelief("PlayerInChaseRange", chaseSensor);
+        factory.AddSensorBelief("PlayerInAttackRange", attackSensor);
+        factory.AddBelief("AttackingPlayer", () => false);
     }
 
     void SetupActions()
@@ -98,7 +138,7 @@ public class GoapAgent : MonoBehaviour
             foreach (var asset in actionAssets)
             {
                 if (asset != null)
-                    actions.Add(asset.CreateAction(beliefs, navMeshAgent));
+                    actions.Add(asset.CreateAction(beliefs, navMeshAgent, locations));
             }
         }
     }
@@ -130,10 +170,16 @@ public class GoapAgent : MonoBehaviour
     // TODO Перенести в систему статистик
     void UpdateStats()
     {
-        stamina += InRangeOf(restingPosition.position, 3f) ? 20 : -10;
-        health += InRangeOf(kitchenPosition.position, 3f) ? 20 : -5;
+        stamina += InRangeOf(restingPosition.position, 3f) ? 100 : -5;
+        health += InRangeOf(kitchenPosition.position, 3f) ? 50 : -5;
+        studyDesire += InRangeOf(officePosition.position, 3f) ? 30 : -5;
+        trainingDesire += InRangeOf(trainingPosition.position, 3f) ? 30 : -5;
+        repairCarDesire += InRangeOf(garagePosition.position, 3f) ? 30 : -5;
         stamina = Mathf.Clamp(stamina, 0, 100);
         health = Mathf.Clamp(health, 0, 100);
+        studyDesire = Mathf.Clamp(studyDesire, 0, 100);
+        trainingDesire = Mathf.Clamp(trainingDesire, 0, 100);
+        repairCarDesire = Mathf.Clamp(repairCarDesire, 0, 100);
     }
 
     bool InRangeOf(Vector3 pos, float range) => Vector3.Distance(transform.position, pos) < range;
@@ -153,6 +199,8 @@ public class GoapAgent : MonoBehaviour
     {
         statsTimer.Tick(Time.deltaTime);
         // animations.SetSpeed(navMeshAgent.velocity.magnitude);
+
+        // Удалён блок прерывания по приоритету
 
         // Обновить план и текущее действие, если таковое имеется
         if (currentAction == null)

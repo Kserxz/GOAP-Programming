@@ -9,10 +9,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3b55f59a7f88d9a47b99bccde07139f5, type: 3}
-  m_Name: StayHealthy
+  m_Script: {fileID: 11500000, guid: 403f1c5fc5f5fe741a8887202c8f8dec, type: 3}
+  m_Name: ExcerciseAction
   m_EditorClassIdentifier: 
-  GoalName: StayHealthy
-  Priority: 10
-  DesiredEffects:
-  - AgentIsHealthy
+  ActionName: Excercise
+  Cost: 1
+  StrategyType: 0
+  IdleDuration: 5
+  WanderRadius: 10
+  MoveTargetName: 
+  Preconditions:
+  - AgentInGym
+  Effects:
+  - AgentIsTrained

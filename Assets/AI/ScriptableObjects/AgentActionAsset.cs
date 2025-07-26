@@ -5,7 +5,8 @@ public enum ActionStrategyType
 {
     Idle,
     Move,
-    Wander
+    Wander,
+    MoveToPlayer // новый тип
 }
 
 [CreateAssetMenu(menuName = "GOAP/Action")]
@@ -18,7 +19,7 @@ public class AgentActionAsset : ScriptableObject
     public ActionStrategyType StrategyType = ActionStrategyType.Idle;
     public float IdleDuration = 1f;
     public float WanderRadius = 10f;
-    public Transform MoveTarget;
+    public string MoveTargetName; // имя локации вместо GameObject
 
     [Header("Preconditions (Belief Names)")]
     public string[] Preconditions;
@@ -26,7 +27,11 @@ public class AgentActionAsset : ScriptableObject
     [Header("Effects (Belief Names)")]
     public string[] Effects;
 
-    public AgentAction CreateAction(Dictionary<string, AgentBelief> beliefs, UnityEngine.AI.NavMeshAgent navMeshAgent)
+    public AgentAction CreateAction(
+        Dictionary<string, AgentBelief> beliefs,
+        UnityEngine.AI.NavMeshAgent navMeshAgent,
+        Dictionary<string, Transform> locations // передаём словарь локаций
+    )
     {
         var builder = new AgentAction.Builder(ActionName)
             .WithCost(Cost);
@@ -38,10 +43,20 @@ public class AgentActionAsset : ScriptableObject
                 builder.WithStrategy(new IdleStrategy(IdleDuration));
                 break;
             case ActionStrategyType.Move:
-                builder.WithStrategy(new MoveStrategy(navMeshAgent, () => MoveTarget ? MoveTarget.position : Vector3.zero));
+                builder.WithStrategy(new MoveStrategy(
+                    navMeshAgent,
+                    () => locations.TryGetValue(MoveTargetName, out var t) && t ? t.position : Vector3.zero
+                ));
                 break;
             case ActionStrategyType.Wander:
                 builder.WithStrategy(new WanderStrategy(navMeshAgent, WanderRadius));
+                break;
+            case ActionStrategyType.MoveToPlayer:
+                // Используем позицию из убеждения PlayerInChaseRange
+                builder.WithStrategy(new MoveStrategy(
+                    navMeshAgent,
+                    () => beliefs.TryGetValue("PlayerInChaseRange", out var b) ? b.Location : Vector3.zero
+                ));
                 break;
         }
 
