@@ -19,11 +19,6 @@ public class GoapAgent : MonoBehaviour
     [SerializeField] Transform bedroomPosition;
     [SerializeField] Transform officePosition;
     [SerializeField] Transform bathroomPosition;
-    [SerializeField] Transform trainingPosition;
-
-    [Header("GOAP Assets")]
-    [SerializeField] AgentActionAsset[] actionAssets;
-    [SerializeField] AgentGoalAsset[] goalAssets;
 
     NavMeshAgent navMeshAgent;
     //    AnimationController animations;
@@ -32,9 +27,6 @@ public class GoapAgent : MonoBehaviour
     [Header("Stats")]
     public float health = 100;
     public float stamina = 100;
-    public float studyDesire = 100;
-    public float trainingDesire = 100;      // Новая статистика
-    public float repairCarDesire = 100;     // Новая статистика
 
     CountdownTimer statsTimer;
 
@@ -49,8 +41,6 @@ public class GoapAgent : MonoBehaviour
     public Dictionary<string, AgentBelief> beliefs;
     public HashSet<AgentAction> actions;
     public HashSet<AgentGoal> goals;
-
-    Dictionary<string, Transform> locations;
 
     IGoapPlanner gPlanner;
 
@@ -67,26 +57,9 @@ public class GoapAgent : MonoBehaviour
     void Start()
     {
         SetupTimers();
-        SetupLocations();
         SetupBeliefs();
         SetupActions();
         SetupGoals();
-    }
-
-    void SetupLocations()
-    {
-        locations = new Dictionary<string, Transform>
-        {
-            { "restingPosition", restingPosition },
-            { "kitchenPosition", kitchenPosition },
-            { "garagePosition", garagePosition },
-            { "bedroomPosition", bedroomPosition },
-            { "officePosition", officePosition },
-            { "bathroomPosition", bathroomPosition },
-            { "trainingPosition", trainingPosition },
-            { "repairCarPosition", garagePosition }
-            // добавить другие при расширении
-        };
     }
 
     void SetupBeliefs()
@@ -94,66 +67,105 @@ public class GoapAgent : MonoBehaviour
         beliefs = new Dictionary<string, AgentBelief>();
         BeliefFactory factory = new BeliefFactory(this, beliefs);
 
-        // Жёстко заданные убеждения
         factory.AddBelief("Nothing", () => false);
-        factory.AddBelief("AgentHandsAreClean", () => false);
+
         factory.AddBelief("AgentIdle", () => !navMeshAgent.hasPath);
         factory.AddBelief("AgentMoving", () => navMeshAgent.hasPath);
-
-        // Убеждения для здоровья и стамины
         factory.AddBelief("AgentHealthLow", () => health < 20);
         factory.AddBelief("AgentIsHealthy", () => health >= 40);
         factory.AddBelief("AgentStaminaLow", () => stamina < 20);
         factory.AddBelief("AgentIsRested", () => stamina >= 40);
 
-        // Убеждения для обучения
-        factory.AddBelief("AgentStudyDesireLow", () => studyDesire < 20);
-        factory.AddBelief("AgentIsStudied", () => studyDesire >= 95);
-
-        // убеждения для TrainingDesire
-        factory.AddBelief("AgentTrainingDesireLow", () => trainingDesire < 20);
-        factory.AddBelief("AgentIsTrained", () => trainingDesire >= 70);
-
-        // убеждения для RepairCarDesire
-        factory.AddBelief("AgentRepairCarDesireLow", () => repairCarDesire < 20);
-        factory.AddBelief("AgentCarIsRepaired", () => repairCarDesire >= 70);
-
         factory.AddLocationBelief("AgentInOffice", 3f, officePosition);
         factory.AddLocationBelief("AgentInKitchen", 3f, kitchenPosition);
         factory.AddLocationBelief("AgentAtRestingPosition", 3f, restingPosition);
         factory.AddLocationBelief("AgentInBathroom", 3f, bathroomPosition);
-        factory.AddLocationBelief("AgentInGym", 3f, trainingPosition);
-        factory.AddLocationBelief("AgentInGarage", 3f, garagePosition);
 
-        factory.AddSensorBelief("PlayerInChaseRange", chaseSensor);
-        factory.AddSensorBelief("PlayerInAttackRange", attackSensor);
-        factory.AddBelief("AttackingPlayer", () => false);
+        factory.AddSensorBelief("SpiritInChaseRange", chaseSensor);
+        factory.AddSensorBelief("SpiritInAttackRange", attackSensor);
+        factory.AddBelief("AttackingSpirit", () => false); // Духа всегда можно атаковать, значение никогда не станет правдой
     }
 
     void SetupActions()
     {
         actions = new HashSet<AgentAction>();
-        if (actionAssets != null)
-        {
-            foreach (var asset in actionAssets)
-            {
-                if (asset != null)
-                    actions.Add(asset.CreateAction(beliefs, navMeshAgent, locations));
-            }
-        }
+
+        actions.Add(new AgentAction.Builder("Relax")
+            .WithStrategy(new IdleStrategy(5))
+            .AddEffect(beliefs["Nothing"])
+            .Build());
+
+
+        actions.Add(new AgentAction.Builder("Wander Around")
+            .WithStrategy(new WanderStrategy(navMeshAgent, 10))
+            .AddEffect(beliefs["AgentMoving"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("MoveToEatingPosition")
+            .WithStrategy(new MoveStrategy(navMeshAgent, () => kitchenPosition.position))
+            .AddEffect(beliefs["AgentInKitchen"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("Eat")
+            .WithStrategy(new IdleStrategy(10)) // Позже заменить на команду
+            .AddPrecondition(beliefs["AgentInKitchen"])
+            .AddEffect(beliefs["AgentIsHealthy"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("MoveToBathroom")
+            .WithStrategy(new MoveStrategy(navMeshAgent, () => bathroomPosition.position))
+            .AddEffect(beliefs["AgentInBathroom"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("MoveFromBathroomToRestingPosition")
+            .WithStrategy(new MoveStrategy(navMeshAgent, () => restingPosition.position))
+            .WithCost(2)
+            .AddPrecondition(beliefs["AgentInBathroom"])
+            .AddEffect(beliefs["AgentAtRestingPosition"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("Rest")
+            .WithStrategy(new IdleStrategy(5))
+            .AddPrecondition(beliefs["AgentAtRestingPosition"])
+            .AddEffect(beliefs["AgentIsRested"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("ChaseSpirit")
+            .WithStrategy(new MoveStrategy(navMeshAgent, () => beliefs["SpiritInChaseRange"].Location))
+            .AddPrecondition(beliefs["SpiritInChaseRange"])
+            .AddEffect(beliefs["SpiritInAttackRange"])
+            .Build());
+
+        actions.Add(new AgentAction.Builder("SeekForSpirit")
+            .WithStrategy(new IdleStrategy(1)) // заменить на команду и AttackPlayer(animations)
+            .AddPrecondition(beliefs["SpiritInAttackRange"])
+            .AddEffect(beliefs["AttackingSpirit"])
+            .Build());
     }
 
     void SetupGoals()
     {
         goals = new HashSet<AgentGoal>();
-        if (goalAssets != null)
-        {
-            foreach (var asset in goalAssets)
-            {
-                if (asset != null)
-                    goals.Add(asset.CreateGoal(beliefs));
-            }
-        }
+
+        goals.Add(new AgentGoal.Builder("Chill Out")
+            .WithPriority(1)
+            .WithDesiredEffect(beliefs["Nothing"])
+            .Build());
+
+        goals.Add(new AgentGoal.Builder("Wander")
+            .WithPriority(1)
+            .WithDesiredEffect(beliefs["AgentMoving"])
+            .Build());
+
+        goals.Add(new AgentGoal.Builder("KeepHealthUp")
+            .WithPriority(5)
+            .WithDesiredEffect(beliefs["AgentIsHealthy"])
+            .Build());
+
+        goals.Add(new AgentGoal.Builder("KeepStaminaUp")
+            .WithPriority(4)
+            .WithDesiredEffect(beliefs["AgentIsRested"])
+            .Build());
     }
 
     void SetupTimers()
@@ -170,16 +182,10 @@ public class GoapAgent : MonoBehaviour
     // TODO Перенести в систему статистик
     void UpdateStats()
     {
-        stamina += InRangeOf(restingPosition.position, 3f) ? 100 : -5;
-        health += InRangeOf(kitchenPosition.position, 3f) ? 50 : -5;
-        studyDesire += InRangeOf(officePosition.position, 3f) ? 30 : -5;
-        trainingDesire += InRangeOf(trainingPosition.position, 3f) ? 30 : -5;
-        repairCarDesire += InRangeOf(garagePosition.position, 3f) ? 30 : -5;
+        stamina += InRangeOf(restingPosition.position, 3f) ? 20 : -10;
+        health += InRangeOf(kitchenPosition.position, 3f) ? 20 : -5;
         stamina = Mathf.Clamp(stamina, 0, 100);
         health = Mathf.Clamp(health, 0, 100);
-        studyDesire = Mathf.Clamp(studyDesire, 0, 100);
-        trainingDesire = Mathf.Clamp(trainingDesire, 0, 100);
-        repairCarDesire = Mathf.Clamp(repairCarDesire, 0, 100);
     }
 
     bool InRangeOf(Vector3 pos, float range) => Vector3.Distance(transform.position, pos) < range;
@@ -199,8 +205,6 @@ public class GoapAgent : MonoBehaviour
     {
         statsTimer.Tick(Time.deltaTime);
         // animations.SetSpeed(navMeshAgent.velocity.magnitude);
-
-        // Удалён блок прерывания по приоритету
 
         // Обновить план и текущее действие, если таковое имеется
         if (currentAction == null)

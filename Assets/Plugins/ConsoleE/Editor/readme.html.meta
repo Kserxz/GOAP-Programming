@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 8074474f5167b424e99af22e235e7e23
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 42381
+  packageName: Console Enhanced Free
+  packageVersion: 3.3.5
+  assetPath: Assets/Plugins/ConsoleE/Editor/readme.html
+  uploadId: 621115
